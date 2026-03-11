@@ -1,90 +1,85 @@
 import streamlit as st
 import httpx
-import asyncio
 
-API_BASE = "http://localhost:8000/api/v1"
+API_BASE = "http://127.0.0.1:8001/api/v1"
 
-# ── Page Config ──────────────────────────────────────────────────
 st.set_page_config(
     page_title="APOA - Autonomous Agent",
     page_icon="🤖",
     layout="wide"
 )
 
-# ── Header ───────────────────────────────────────────────────────
 st.title("🤖 APOA — Autonomous Personal Operations Agent")
 st.caption("Give me any goal. I'll plan it, execute it, and remember it.")
 
-# ── Session State ─────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
 if "agent_logs" not in st.session_state:
     st.session_state.agent_logs = []
 
-# ── Layout ───────────────────────────────────────────────────────
 col1, col2 = st.columns([2, 1])
 
-# ── Chat Column ──────────────────────────────────────────────────
 with col1:
     st.subheader("💬 Chat")
 
-    # Display chat history
+    # Display full chat history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            st.text(msg["content"])  # use text not markdown
 
-    # Input
-    user_input = st.chat_input("Give me a goal... e.g. 'Search latest AI frameworks and summarize'")
+    user_input = st.chat_input("Give me a goal...")
 
     if user_input:
-        # Show user message
-        st.session_state.messages.append({
-            "role": "user",
-            "content": user_input
-        })
+        st.session_state.messages.append({"role": "user", "content": user_input})
+
         with st.chat_message("user"):
-            st.markdown(user_input)
+            st.text(user_input)
 
-        # Call API
-        with st.chat_message("assistant"):
-            with st.spinner("Agent is thinking and executing... 🔄"):
-                try:
-                    response = httpx.post(
-                        f"{API_BASE}/chat",
-                        json={"message": user_input},
-                        timeout=60.0
-                    )
-                    data = response.json()
+        with st.spinner("Agent is thinking and executing... 🔄"):
+            try:
+                response = httpx.post(
+                    f"{API_BASE}/chat",
+                    json={"message": user_input},
+                    timeout=180.0
+                )
+                data = response.json()
+                agent_response = data.get("response", "No response")
+                tools_used = data.get("tools_used", [])
+                steps_taken = data.get("steps_taken", 0)
+                memory_updated = data.get("memory_updated", False)
 
-                    agent_response = data.get("response", "No response")
-                    tools_used = data.get("tools_used", [])
-                    steps_taken = data.get("steps_taken", 0)
-                    memory_updated = data.get("memory_updated", False)
+                if not agent_response or agent_response.strip() == "":
+                    agent_response = str(data)
 
-                    # Show response
-                    st.markdown(agent_response)
+            except httpx.ConnectError:
+                agent_response = "❌ Cannot connect to backend!"
+                tools_used = []
+                steps_taken = 0
+                memory_updated = False
+            except Exception as e:
+                agent_response = f"❌ Error: {str(e)}"
+                tools_used = []
+                steps_taken = 0
+                memory_updated = False
 
-                    # Save to session
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": agent_response
-                    })
+        # ── Display response OUTSIDE spinner and chat_message ────
+        st.chat_message("assistant").text(agent_response)
 
-                    # Save logs
-                    st.session_state.agent_logs.append({
-                        "task": user_input,
-                        "tools_used": tools_used,
-                        "steps_taken": steps_taken,
-                        "memory_updated": memory_updated
-                    })
+        # Save to session
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": agent_response
+        })
 
-                except httpx.ConnectError:
-                    st.error("❌ Cannot connect to backend. Make sure uvicorn is running!")
-                except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
+        st.session_state.agent_logs.append({
+            "task": user_input,
+            "tools_used": tools_used,
+            "steps_taken": steps_taken,
+            "memory_updated": memory_updated
+        })
 
-# ── Agent Logs Column ─────────────────────────────────────────────
+        st.rerun()  # force UI refresh
+
 with col2:
     st.subheader("🔧 Agent Logs")
 
@@ -105,7 +100,6 @@ with col2:
 
     st.divider()
 
-    # ── Memory Viewer ─────────────────────────────────────────────
     st.subheader("🧠 Conversation Memory")
     if st.button("Load Memory"):
         try:
@@ -117,13 +111,12 @@ with col2:
                 for msg in history:
                     role = msg.get("role", "unknown")
                     content = msg.get("content", "")
-                    st.write(f"**{role.capitalize()}:** {content[:100]}...")
+                    st.write(f"**{role.capitalize()}:** {content[:150]}...")
         except Exception as e:
-            st.error(f"Error loading memory: {str(e)}")
+            st.error(f"Error: {str(e)}")
 
     st.divider()
 
-    # ── Health Check ──────────────────────────────────────────────
     st.subheader("⚡ System Status")
     if st.button("Check Status"):
         try:

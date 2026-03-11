@@ -27,23 +27,17 @@ wikipedia_tool = WikipediaQueryRun(
 # ── Tool 3: Calculator ──────────────────────────────────────────
 @tool
 def calculator(expression: str) -> str:
-    """
-    Evaluates a mathematical expression and returns the result.
-    Input should be a valid Python math expression like '2 + 2' or 'math.sqrt(16)'.
-    """
+    """Evaluates a math expression. Input must be a plain math expression string like '2+2' or '10*5'. Nothing else."""
     try:
         result = eval(expression, {"__builtins__": {}}, {"math": math})
         return str(result)
     except Exception as e:
-        return f"Error evaluating expression: {str(e)}"
+        return f"Error: {str(e)}"
 
 # ── Tool 4: DateTime Tool ───────────────────────────────────────
 @tool
-def datetime_tool(query: str) -> str:
-    """
-    Returns the current date and time.
-    Use this when user asks about current date, time, day, or wants to schedule something.
-    """
+def datetime_tool(dummy: str = "") -> str:
+    """Returns the current date, time, and day of week. Call this whenever you need to know today's date or current time. No input required."""
     now = datetime.now()
     return (
         f"Current datetime: {now.strftime('%A, %B %d, %Y %I:%M %p')}\n"
@@ -55,23 +49,39 @@ def datetime_tool(query: str) -> str:
 @tool
 def email_draft_tool(input: str) -> str:
     """
-    Drafts and simulates sending an email.
+    Drafts a complete professional email.
     Input format: 'to:<email> | subject:<subject> | body:<body>'
-    Example: 'to:rahul@gmail.com | subject:Meeting Agenda | body:Hi Rahul, ...'
+    If body is not provided, generate a professional email body automatically.
+    Example: 'to:rahul@gmail.com | subject:Meeting Agenda | body:discuss project updates'
     """
     try:
         parts = dict(p.strip().split(":", 1) for p in input.split("|"))
-        to = parts.get("to", "unknown@email.com").strip()
+        to = parts.get("to", "recipient@email.com").strip()
         subject = parts.get("subject", "No Subject").strip()
-        body = parts.get("body", "").strip()
+        body_hint = parts.get("body", "").strip()
 
-        return (
-            f"✅ Email drafted successfully!\n"
-            f"To: {to}\n"
-            f"Subject: {subject}\n"
-            f"Body preview: {body[:100]}...\n"
-            f"[Simulated send — in production, connects to Gmail API]"
-        )
+        # Build full drafted email
+        drafted_email = f"""
+            ✅ Email Drafted Successfully!
+            {'='*45}
+            To      : {to}
+            Subject : {subject}
+            {'='*45}
+
+            Dear {to.split('@')[0].capitalize()},
+
+            {body_hint}
+
+            Please let me know if you need anything else.
+
+            Best regards,
+            Abhishek Godara
+            {'='*45}
+            [Simulated — connects to Gmail API in production]
+                    """
+
+        return drafted_email.strip()
+
     except Exception as e:
         return f"Error drafting email: {str(e)}"
 
@@ -80,26 +90,15 @@ reminders = []
 
 @tool
 def reminder_tool(input: str) -> str:
-    """
-    Saves a reminder for the user.
-    Input format: 'task:<task> | date:<date>'
-    Example: 'task:Submit report | date:Monday March 16'
-    """
+    """Saves a reminder for the user. Input format: 'task:<task> | date:<date>'"""
     try:
         parts = dict(p.strip().split(":", 1) for p in input.split("|"))
         task = parts.get("task", "").strip()
         date = parts.get("date", "").strip()
-
         reminders.append({"task": task, "date": date})
-
-        return (
-            f"✅ Reminder saved!\n"
-            f"Task: {task}\n"
-            f"Date: {date}\n"
-            f"Total reminders stored: {len(reminders)}"
-        )
+        return f"✅ Reminder saved!\nTask: {task}\nDate: {date}"
     except Exception as e:
-        return f"Error saving reminder: {str(e)}"
+        return f"Error: {str(e)}"
 
 # ── All tools list (imported by agent) ─────────────────────────
 all_tools = [

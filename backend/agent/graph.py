@@ -1,7 +1,7 @@
 from langchain_groq import ChatGroq
 from langgraph.prebuilt import create_react_agent
-from langchain_classic.agents import AgentExecutor
-from langchain_core.prompts import PromptTemplate
+from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.memory import ConversationBufferMemory
 import sys
 import os
@@ -9,7 +9,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import GROQ_API_KEY, MODEL_NAME
 from agent.tools import all_tools
-from memory.short_term import get_short_term_memory
+# from memory.short_term import get_short_term_memory
 from memory.long_term import get_or_create_vectorstore, save_to_memory, search_memory
 
 # ── LLM Setup ───────────────────────────────────────────────────
@@ -19,62 +19,43 @@ llm = ChatGroq(
     temperature=0,
 )
 
+llm_with_tools = llm.bind_tools(all_tools)
+
 # ── ReAct Prompt ─────────────────────────────────────────────────
-REACT_PROMPT = PromptTemplate.from_template("""
-You are APOA — Autonomous Personal Operations Agent.
-You are a highly capable AI agent that can execute real-world tasks autonomously.
-
-You have access to the following tools:
-{tools}
-
-You also have access to previous context from long-term memory:
-{long_term_context}
-
-Previous conversation:
-{chat_history}
-
-Use the following format STRICTLY:
-
-Question: the input question you must answer
-Thought: think about what to do
-Action: the action to take, must be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (repeat Thought/Action/Action Input/Observation as needed)
-Thought: I now know the final answer
-Final Answer: the final answer to the original question
-
-IMPORTANT RULES:
-- Always think step by step
-- Use tools when needed, don't guess
-- Be concise but complete in final answer
-- If a task has multiple steps, execute them one by one
-
-Begin!
-
-Question: {input}
-Thought: {agent_scratchpad}
-""")
+prompt = ChatPromptTemplate.from_messages([
+    ("system",
+    "You are APOA — Autonomous Personal Operations Agent.\n"
+    "You execute real-world tasks autonomously using tools.\n"
+    "Always think step by step. Use tools when needed.\n\n"
+    "CRITICAL: When email_draft_tool or reminder_tool returns output, "
+    "your Final Answer MUST be the EXACT complete output from the tool. "
+    "Copy it word for word. Never summarize tool outputs."
+    ),
+    MessagesPlaceholder(variable_name="chat_history"),
+    ("human", "{input}"),
+    MessagesPlaceholder(variable_name="agent_scratchpad"),
+])
 
 # ── Agent Builder ────────────────────────────────────────────────
 def build_agent():
-    """
-    Builds and returns the ReAct agent with tools + memory.
-    """
-    memory = get_short_term_memory()
+    memory = ConversationBufferMemory(
+        memory_key="chat_history",
+        return_messages=True,
+        output_key="output"
+    )
     vectorstore = get_or_create_vectorstore()
 
-    agent = create_react_agent(
-        model=llm,
+    agent = create_tool_calling_agent(
+        llm=llm_with_tools,
         tools=all_tools,
-        prompt=REACT_PROMPT,
+        prompt=prompt,
     )
 
     agent_executor = AgentExecutor(
         agent=agent,
         tools=all_tools,
         memory=memory,
-        verbose=True,           # shows reasoning steps in terminal
+        verbose=True,
         handle_parsing_errors=True,
         max_iterations=10,
         return_intermediate_steps=True,
@@ -85,36 +66,42 @@ def build_agent():
 
 # ── Main Run Function ────────────────────────────────────────────
 async def run_agent(user_input: str, agent_executor, vectorstore) -> dict:
-    """
-    Runs the agent on a user input.
-    Returns response + tools used + memory update confirmation.
-    """
-    # Search long-term memory for relevant context
     long_term_context = search_memory(vectorstore, user_input)
 
-    # Run agent
-    result = await agent_executor.ainvoke({
-        "input": user_input,
-        "long_term_context": long_term_context,
-    })
+    try:
+        result = await agent_executor.ainvoke({
+            "input": f"{user_input}\n\nPast context: {long_term_context}",
+        })
 
-    # Extract output
-    output = result.get("output", "")
+        output = result.get("output", "")
+        intermediate_steps = result.get("intermediate_steps", [])
+        tools_used = [step[0].tool for step in intermediate_steps]
 
-    # Extract tools used
-    intermediate_steps = result.get("intermediate_steps", [])
-    tools_used = [step[0].tool for step in intermediate_steps]
+        # ── If email or reminder tool was used, return tool output directly ──
+        for step in intermediate_steps:
+            tool_name = step[0].tool
+            tool_output = step[1]
+            if tool_name in ["email_draft_tool", "reminder_tool"]:
+                output = str(tool_output)  # use raw tool output, skip LLM summary
+                break
 
-    # Save task to long-term memory
-    save_to_memory(
-        vectorstore,
-        f"User asked: {user_input} | Agent responded: {output[:200]}",
-        metadata={"type": "task"}
-    )
+        save_to_memory(
+            vectorstore,
+            f"User: {user_input} | Agent: {output[:200]}",
+            metadata={"type": "task"}
+        )
 
-    return {
-        "response": output,
-        "tools_used": tools_used,
-        "memory_updated": True,
-        "steps_taken": len(intermediate_steps)
-    }
+        return {
+            "response": output,
+            "tools_used": tools_used,
+            "memory_updated": True,
+            "steps_taken": len(intermediate_steps)
+        }
+
+    except Exception as e:
+        return {
+            "response": f"Agent error: {str(e)}",
+            "tools_used": [],
+            "memory_updated": False,
+            "steps_taken": 0
+        }
