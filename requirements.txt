@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+langchain
+langchain-community
+langchain-groq
+langchain-classic
+langchain-tavily
+langchain-huggingface
+langgraph
+tavily-python
+faiss-cpu
+sentence-transformers
+streamlit
+python-dotenv
+pydantic
+httpx
