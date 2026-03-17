@@ -16,7 +16,7 @@ An autonomous AI agent that executes real-world tasks by orchestrating tools, ma
 | "What day is it and what's 10 days from now?" | `datetime_tool` |
 | "Calculate compound interest at 8% for 3 years" | `calculator` |
 | "Search latest AI agent frameworks in 2026" | `tavily_search` |
-| "Draft an email to rahul@gmail.com about meeting" | `email_draft_tool` |
+| "Draft an email to abhishekgodara032@gmail.com about meeting" | `email_draft_tool` |
 | "Remind me to push code tonight" | `reminder_tool` |
 
 ---
@@ -130,24 +130,6 @@ Step 3 → Drafts complete email with search results
 Step 4 → Saves task to long-term memory
 Step 5 → Returns full response to user
 ```
-
----
-
-## 📝 Resume Highlights
-
-- Engineered a goal-driven autonomous agent using LangChain's AgentExecutor with dynamic tool selection across 6 integrated APIs
-- Implemented dual-layer memory architecture combining ConversationBufferMemory for session context and FAISS vector store for long-term knowledge persistence
-- Integrated Groq LLaMA 3.3 70B with function calling for autonomous multi-step task execution without human intervention
-
----
-
-## 🔮 Future Improvements
-
-- [ ] Connect real Gmail API for actual email sending
-- [ ] Add Google Calendar integration
-- [ ] React + TypeScript frontend
-- [ ] Multi-agent architecture (Planner + Executor agents)
-- [ ] Docker containerization
 
 ---
 
