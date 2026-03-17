@@ -2,11 +2,10 @@
 
 An autonomous AI agent that executes real-world tasks by orchestrating tools, managing memory, and reasoning step-by-step — without human intervention.
 
-> Built to demonstrate production-grade agentic AI architecture using LangChain, Groq LLaMA, and FastAPI.
+> Built to demonstrate production-grade agentic AI architecture using LangChain, Groq LLaMA, and Streamlit.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit-red?style=for-the-badge&logo=streamlit)](https://abhishek-APOA-Agent.streamlit.app/)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-black?style=for-the-badge&logo=github)](https://github.com/AbhiGodara/APOA-AGENT)
-```
 
 ---
 
@@ -23,28 +22,24 @@ An autonomous AI agent that executes real-world tasks by orchestrating tools, ma
 ---
 
 ## 🏗️ Architecture
+
+**Request Flow:**
+
 ```
 User Request
-     │
-     ▼
-FastAPI Backend (Async)
-     │
-     ▼
+      ↓
 AgentExecutor (LangChain)
-     │
-     ▼
+      ↓
 Tool Router — selects from 6 tools autonomously
- ┌──────────┬──────────┬───────────┬──────────┬──────────┐
- ▼          ▼          ▼           ▼          ▼
-Web      Wikipedia  Calculator  DateTime   Email &
-Search              Tool        Tool       Reminder
-     │
-     ▼
+      ↓
+ ┌─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
+ ↓             ↓             ↓             ↓             ↓             ↓
+Web Search  Wikipedia   Calculator   DateTime     Email       Reminder
+      ↓
 Dual-Layer Memory
-├── Short-term: ConversationBufferMemory (session context)
-└── Long-term:  FAISS Vector Store (persistent across sessions)
-     │
-     ▼
+      ├── Short-term : ConversationBufferMemory  (session context)
+      └── Long-term  : FAISS Vector Store        (persistent across sessions)
+      ↓
 Response to User
 ```
 
@@ -59,41 +54,34 @@ Response to User
 | Tool Orchestration | LangChain Tool Calling |
 | Short-term Memory | ConversationBufferMemory |
 | Long-term Memory | FAISS + HuggingFace Embeddings |
-| Backend | FastAPI (Async) |
 | Frontend | Streamlit |
 | Web Search | Tavily API |
 
 ---
 
 ## 📁 Project Structure
+
 ```
 apoa-agent/
 │
+├── app.py                        # Streamlit entry point
+│
 ├── backend/
-│   ├── main.py                  # FastAPI entry point
-│   │
 │   ├── agent/
-│   │   ├── __init__.py
-│   │   ├── graph.py             # LangGraph agent workflow
-│   │   ├── planner.py           # Task decomposition logic
-│   │   └── tools.py             # All 5 tools defined here
+│   │   ├── graph.py              # Agent orchestration logic
+│   │   └── tools.py              # 6 tool definitions
 │   │
 │   ├── memory/
-│   │   ├── __init__.py
-│   │   ├── short_term.py        # ConversationBufferMemory
-│   │   └── long_term.py         # FAISS vector store
+│   │   ├── short_term.py         # ConversationBufferMemory
+│   │   └── long_term.py          # FAISS vector store
 │   │
 │   └── api/
-│       ├── __init__.py
-│       └── routes.py            # Async FastAPI routes
-│
-├── frontend/
-│   └── app.py                   # Streamlit UI
+│       └── routes.py             # FastAPI async routes
 │
 ├── config/
-│   └── settings.py              # All env vars loaded here
+│   └── settings.py               # Environment variables
 │
-├── .env                         # API keys
+├── .env                          # API keys (not committed)
 ├── requirements.txt
 └── README.md
 ```
@@ -102,36 +90,29 @@ apoa-agent/
 
 ## 🚀 Getting Started
 
-### 1. Clone the repo
+**1. Clone the repo**
 ```bash
 git clone https://github.com/AbhiGodara/APOA-AGENT.git
 cd apoa-agent
 ```
 
-### 2. Install dependencies
+**2. Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Set up environment variables
+**3. Set up environment variables**
 ```bash
-# Create .env file in backend/
 GROQ_API_KEY=your_groq_api_key
 TAVILY_API_KEY=your_tavily_api_key
 ```
 
-### 4. Run the backend
+**4. Run the app**
 ```bash
-cd backend
-uvicorn main:app --host 127.0.0.1 --port 8001
+streamlit run app.py
 ```
 
-### 5. Run the frontend
-```bash
-streamlit run frontend/app.py
-```
-
-### 6. Open in browser
+**5. Open in browser**
 ```
 http://localhost:8501
 ```
@@ -139,6 +120,7 @@ http://localhost:8501
 ---
 
 ## 🧠 How the Agent Reasons
+
 ```
 User: "Search latest AI frameworks and draft an email about them"
 
@@ -155,8 +137,7 @@ Step 5 → Returns full response to user
 
 - Engineered a goal-driven autonomous agent using LangChain's AgentExecutor with dynamic tool selection across 6 integrated APIs
 - Implemented dual-layer memory architecture combining ConversationBufferMemory for session context and FAISS vector store for long-term knowledge persistence
-- Built async FastAPI backend exposing agent capabilities via RESTful endpoints with complex JSON request/response schemas
-- Integrated Groq LLaMA 3.3 70B with tool calling for autonomous multi-step task execution without human intervention
+- Integrated Groq LLaMA 3.3 70B with function calling for autonomous multi-step task execution without human intervention
 
 ---
 
@@ -172,6 +153,9 @@ Step 5 → Returns full response to user
 
 ## 👨‍💻 Author
 
-**Abhishek Godara**  
-B.Tech CSE (AI & ML) — IIIT Nagpur  
-[LinkedIn](https://www.linkedin.com/in/abhishek-godara-a82a1b2a0/) | [GitHub](https://github.com/AbhiGodara) | [Kaggle](https://www.kaggle.com/abhishekgodara)
+**Abhishek Godara**
+B.Tech CSE (AI & ML) — IIIT Nagpur
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?style=flat&logo=linkedin)](https://www.linkedin.com/in/abhishek-godara-a82a1b2a0/)
+[![GitHub](https://img.shields.io/badge/GitHub-black?style=flat&logo=github)](https://github.com/AbhiGodara)
+[![Kaggle](https://img.shields.io/badge/Kaggle-blue?style=flat&logo=kaggle)](https://www.kaggle.com/abhishekgodara)
