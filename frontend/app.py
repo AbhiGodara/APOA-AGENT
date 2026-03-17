@@ -1,8 +1,14 @@
 import streamlit as st
-import httpx
+import asyncio
+import nest_asyncio
+import sys
+import os
 
-API_BASE = "http://127.0.0.1:8001/api/v1"
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+from agent.graph import build_agent, run_agent
+
+# ── Page Config ──────────────────────────────────────────────────
 st.set_page_config(
     page_title="APOA - Autonomous Agent",
     page_icon="🤖",
@@ -12,73 +18,82 @@ st.set_page_config(
 st.title("🤖 APOA — Autonomous Personal Operations Agent")
 st.caption("Give me any goal. I'll plan it, execute it, and remember it.")
 
+# ── Session State ─────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "agent_logs" not in st.session_state:
     st.session_state.agent_logs = []
 
+# ── Build Agent once ─────────────────────────────────────────────
+@st.cache_resource
+def get_agent():
+    return build_agent()
+
+# ── Layout ───────────────────────────────────────────────────────
 col1, col2 = st.columns([2, 1])
 
 with col1:
     st.subheader("💬 Chat")
 
-    # Display full chat history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.text(msg["content"])  # use text not markdown
+            st.text(msg["content"])
 
     user_input = st.chat_input("Give me a goal...")
 
     if user_input:
         st.session_state.messages.append({"role": "user", "content": user_input})
-
         with st.chat_message("user"):
             st.text(user_input)
 
-        with st.spinner("Agent is thinking and executing... 🔄"):
+        with st.spinner("Agent is thinking... 🔄"):
             try:
-                response = httpx.post(
-                    f"{API_BASE}/chat",
-                    json={"message": user_input},
-                    timeout=180.0
+                agent_executor, vectorstore = get_agent()
+                
+                # Run synchronously — no asyncio needed
+                from memory.long_term import search_memory, save_to_memory
+                long_term_context = search_memory(vectorstore, user_input)
+                
+                result = agent_executor.invoke({
+                    "input": f"{user_input}\n\nPast context: {long_term_context}\n\nIMPORTANT: If you use email_draft_tool or reminder_tool, copy the COMPLETE tool output into your final answer word for word.",
+                })
+                
+                output = result.get("output", "")
+                intermediate_steps = result.get("intermediate_steps", [])
+                tools_used = [step[0].tool for step in intermediate_steps]
+
+                # Return raw tool output for email/reminder
+                for step in intermediate_steps:
+                    if step[0].tool in ["email_draft_tool", "reminder_tool"]:
+                        output = str(step[1])
+                        break
+
+                if not output:
+                    output = "Agent completed but returned no output."
+
+                save_to_memory(
+                    vectorstore,
+                    f"User: {user_input} | Agent: {output[:200]}",
+                    metadata={"type": "task"}
                 )
-                data = response.json()
-                agent_response = data.get("response", "No response")
-                tools_used = data.get("tools_used", [])
-                steps_taken = data.get("steps_taken", 0)
-                memory_updated = data.get("memory_updated", False)
 
-                if not agent_response or agent_response.strip() == "":
-                    agent_response = str(data)
+                steps_taken = len(intermediate_steps)
 
-            except httpx.ConnectError:
-                agent_response = "❌ Cannot connect to backend!"
-                tools_used = []
-                steps_taken = 0
-                memory_updated = False
             except Exception as e:
-                agent_response = f"❌ Error: {str(e)}"
+                output = f"❌ Error: {str(e)}"
                 tools_used = []
                 steps_taken = 0
-                memory_updated = False
 
-        # ── Display response OUTSIDE spinner and chat_message ────
-        st.chat_message("assistant").text(agent_response)
+        st.chat_message("assistant").text(output)
 
-        # Save to session
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": agent_response
-        })
-
+        st.session_state.messages.append({"role": "assistant", "content": output})
         st.session_state.agent_logs.append({
             "task": user_input,
             "tools_used": tools_used,
             "steps_taken": steps_taken,
-            "memory_updated": memory_updated
         })
 
-        st.rerun()  # force UI refresh
+        st.rerun()
 
 with col2:
     st.subheader("🔧 Agent Logs")
@@ -90,37 +105,40 @@ with col2:
             with st.expander(f"Task {len(st.session_state.agent_logs) - i}"):
                 st.write(f"**Goal:** {log['task']}")
                 st.write(f"**Steps taken:** {log['steps_taken']}")
-                st.write(f"**Memory updated:** {'✅' if log['memory_updated'] else '❌'}")
                 if log['tools_used']:
                     st.write("**Tools used:**")
-                    for tool in log['tools_used']:
-                        st.write(f"  - 🔧 `{tool}`")
+                    for t in log['tools_used']:
+                        st.write(f"  - 🔧 `{t}`")
                 else:
                     st.write("**Tools used:** None")
 
     st.divider()
 
-    st.subheader("🧠 Conversation Memory")
+    st.subheader("🧠 Memory")
     if st.button("Load Memory"):
         try:
-            res = httpx.get(f"{API_BASE}/history", timeout=10.0)
-            history = res.json().get("history", [])
-            if not history:
+            agent_executor, _ = get_agent()
+            memory_vars = agent_executor.memory.load_memory_variables({})
+            messages = memory_vars.get("chat_history", [])
+            if not messages:
                 st.info("No memory yet.")
             else:
-                for msg in history:
-                    role = msg.get("role", "unknown")
-                    content = msg.get("content", "")
-                    st.write(f"**{role.capitalize()}:** {content[:150]}...")
+                for msg in messages:
+                    st.write(f"**{msg.type.capitalize()}:** {msg.content[:150]}...")
         except Exception as e:
             st.error(f"Error: {str(e)}")
 
     st.divider()
 
     st.subheader("⚡ System Status")
-    if st.button("Check Status"):
+    if st.button("Check Agent"):
         try:
-            res = httpx.get(f"{API_BASE}/health", timeout=5.0)
-            st.success(res.json().get("status", "Unknown"))
-        except:
-            st.error("❌ Backend not reachable")
+            get_agent()
+            st.success("✅ Agent is ready!")
+        except Exception as e:
+            st.error(f"❌ {str(e)}")
+
+    if st.button("Clear Chat"):
+        st.session_state.messages = []
+        st.session_state.agent_logs = []
+        st.rerun()
