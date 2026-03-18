@@ -25,13 +25,16 @@ if "agent_logs" not in st.session_state:
     st.session_state.agent_logs = []
 if "agent_executor" not in st.session_state:
     st.session_state.agent_executor = None
+if "vectorstore" not in st.session_state:
     st.session_state.vectorstore = None
 
 # ── Build Agent once ─────────────────────────────────────────────
 # @st.cache_resource
 def get_agent():
-    if "agent_executor" not in st.session_state:
-        st.session_state.agent_executor, st.session_state.vectorstore = build_agent()
+    if "agent_executor" not in st.session_state or st.session_state.agent_executor is None:
+        executor, vs = build_agent()
+        st.session_state.agent_executor = executor
+        st.session_state.vectorstore = vs
     return st.session_state.agent_executor, st.session_state.vectorstore
 
 # ── Layout ───────────────────────────────────────────────────────
@@ -54,20 +57,25 @@ with col1:
         with st.spinner("Agent is thinking... 🔄"):
             try:
                 agent_executor, vectorstore = get_agent()
-                
-                # Run synchronously — no asyncio needed
-                from memory.long_term import search_memory, save_to_memory
-                long_term_context = search_memory(vectorstore, user_input)
-                
-                result = agent_executor.invoke({
-                    "input": f"{user_input}\n\nPast context: {long_term_context}\n\nIMPORTANT: If you use email_draft_tool or reminder_tool, copy the COMPLETE tool output into your final answer word for word.",
-                })
-                
+
+                # Build conversation history string from session state
+                history = ""
+                for msg in st.session_state.messages[-6:]:  # last 3 exchanges
+                    role = "User" if msg["role"] == "user" else "Assistant"
+                    history += f"{role}: {msg['content']}\n"
+
+                # Inject history into input
+                full_input = f"{user_input}"
+                if history:
+                    full_input = f"Conversation so far:\n{history}\nUser's new message: {user_input}"
+
+                result = agent_executor.invoke({"input": full_input})
                 output = result.get("output", "")
+                output = output.replace("Final Answer:", "").strip()
+                output = output.replace("The final answer is", "").strip()
                 intermediate_steps = result.get("intermediate_steps", [])
                 tools_used = [step[0].tool for step in intermediate_steps]
 
-                # Return raw tool output for email/reminder
                 for step in intermediate_steps:
                     if step[0].tool in ["email_draft_tool", "reminder_tool"]:
                         output = str(step[1])
@@ -75,13 +83,6 @@ with col1:
 
                 if not output:
                     output = "Agent completed but returned no output."
-
-                save_to_memory(
-                    vectorstore,
-                    f"User: {user_input} | Agent: {output[:200]}",
-                    metadata={"type": "task"}
-                )
-
                 steps_taken = len(intermediate_steps)
 
             except Exception as e:

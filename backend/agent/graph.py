@@ -24,12 +24,21 @@ llm_with_tools = llm.bind_tools(all_tools)
 # ── ReAct Prompt ─────────────────────────────────────────────────
 prompt = ChatPromptTemplate.from_messages([
     ("system",
-    "You are APOA — Autonomous Personal Operations Agent.\n"
-    "You execute real-world tasks autonomously using tools.\n"
-    "Always think step by step. Use tools when needed.\n\n"
-    "CRITICAL: When email_draft_tool or reminder_tool returns output, "
-    "your Final Answer MUST be the EXACT complete output from the tool. "
-    "Copy it word for word. Never summarize tool outputs."
+    "You are APOA — Autonomous Personal Operations Agent.\n\n"
+    "STRICT RULES:\n"
+    "1. Use ONLY ONE tool per response\n"
+    "2. After tool result, give Final Answer immediately\n"
+    "3. Never call multiple tools for one request\n\n"
+    "TOOL SELECTION — follow EXACTLY:\n"
+    "- User says hello/hi/their name/introduction → general_response\n"
+    "- User asks about current events/news/who is X → tavily_search\n"
+    "- User asks for math/calculation → calculator\n"
+    "- User asks what day/time/date it is → datetime_tool\n"
+    "- User asks to draft/send an email → email_draft_tool\n"
+    "- User asks to set/save a reminder → reminder_tool\n"
+    "- Anything else → general_response\n\n"
+    "NEVER use email_draft_tool unless user explicitly says 'draft email' or 'send email'.\n"
+    "NEVER use reminder_tool unless user explicitly says 'remind me' or 'set reminder'."
     ),
     MessagesPlaceholder(variable_name="chat_history"),
     ("human", "{input}"),
@@ -57,7 +66,8 @@ def build_agent():
         memory=memory,
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=10,
+        max_iterations=5,
+        max_execution_time=30,
         return_intermediate_steps=True,
     )
 

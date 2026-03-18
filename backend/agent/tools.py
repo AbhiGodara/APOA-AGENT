@@ -3,10 +3,14 @@ from langchain.tools import tool
 from langchain_tavily import TavilySearch
 from langchain_community.tools import WikipediaQueryRun
 from langchain_community.utilities import WikipediaAPIWrapper
+from langchain_groq import ChatGroq
+from config.settings import GROQ_API_KEY, MODEL_NAME
 from datetime import datetime
 import math
 import sys
 import os
+    
+llm = ChatGroq(api_key=GROQ_API_KEY, model_name=MODEL_NAME, temperature=0.7)
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import TAVILY_API_KEY
@@ -99,13 +103,24 @@ def reminder_tool(input: str) -> str:
         return f"✅ Reminder saved!\nTask: {task}\nDate: {date}"
     except Exception as e:
         return f"Error: {str(e)}"
+    
+@tool
+def general_response(query: str) -> str:
+    """
+    Use this for any general question, greeting, advice, explanation, or conversation
+    that does not require web search, calculation, email, datetime, or reminders.
+    Examples: 'hello', 'explain AI', 'what is machine learning', 'give me advice'.
+    Input: the user's question or message.
+    """
+    response = llm.invoke(query)
+    return response.content
 
 # ── All tools list (imported by agent) ─────────────────────────
 all_tools = [
     web_search_tool,
-    wikipedia_tool,
     calculator,
     datetime_tool,
     email_draft_tool,
     reminder_tool,
+    general_response,
 ]
