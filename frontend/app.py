@@ -23,11 +23,16 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "agent_logs" not in st.session_state:
     st.session_state.agent_logs = []
+if "agent_executor" not in st.session_state:
+    st.session_state.agent_executor = None
+    st.session_state.vectorstore = None
 
 # ── Build Agent once ─────────────────────────────────────────────
-@st.cache_resource
+# @st.cache_resource
 def get_agent():
-    return build_agent()
+    if "agent_executor" not in st.session_state:
+        st.session_state.agent_executor, st.session_state.vectorstore = build_agent()
+    return st.session_state.agent_executor, st.session_state.vectorstore
 
 # ── Layout ───────────────────────────────────────────────────────
 col1, col2 = st.columns([2, 1])
